@@ -1,0 +1,1334 @@
+local ModernMenu = {}
+ModernMenu.__index = ModernMenu
+
+-- Default colors
+local defaultColors = {
+	background = Color3.fromRGB(30, 30, 40),
+	sectionBackground = Color3.fromRGB(25, 25, 35),
+	topBar = Color3.fromRGB(20, 20, 30),
+	text = Color3.fromRGB(240, 240, 240),
+	accent = Color3.fromRGB(0, 120, 215),
+	toggleOff = Color3.fromRGB(80, 80, 80),
+	toggleOn = Color3.fromRGB(0, 180, 80),
+	sliderBackground = Color3.fromRGB(60, 60, 70),
+	sliderFill = Color3.fromRGB(0, 120, 215),
+	textBoxBackground = Color3.fromRGB(40, 40, 50),
+	bindButton = Color3.fromRGB(90, 90, 120)
+}
+
+function ModernMenu.new(title, size, position)
+	local self = setmetatable({}, ModernMenu)
+
+	self.title = title or "Modern Menu"
+	self.size = size or UDim2.new(0, 400, 0, 500)
+	self.position = position or UDim2.new(0.5, -200, 0.5, -250)
+	self.colors = table.clone(defaultColors)
+	self.sections = {}
+	self.currentSection = nil
+	self.settingsOpen = false
+	self.controls = {}
+	self.colorPickers = {}
+	self.modalWindowOpen = false
+	self.waitingForBind = nil -- Для отслеживания привязки клавиш
+
+	self:createMainFrame()
+	self:createTopBar()
+	self:createSectionsFrame()
+	self:createContentFrame()
+	self:createSettingsMenu()
+
+	-- Обработчик ввода для привязки клавиш
+	self.inputConnection = game:GetService("UserInputService").InputBegan:Connect(function(input)
+		if self.waitingForBind and not self.modalWindowOpen then
+			if input.UserInputType == Enum.UserInputType.Keyboard then
+				self.waitingForBind.callback(input.KeyCode)
+				self.waitingForBind.button.Text = tostring(input.KeyCode):gsub("Enum.KeyCode.", "")
+				self.waitingForBind = nil
+			end
+		end
+	end)
+
+	return self
+end
+
+function ModernMenu:createMainFrame()
+	self.mainFrame = Instance.new("ScreenGui")
+	self.mainFrame.Name = "ModernMenu"
+	self.mainFrame.ResetOnSpawn = false
+	self.mainFrame.ZIndexBehavior = Enum.ZIndexBehavior.Global
+	self.mainFrame.IgnoreGuiInset = true
+
+	local frame = Instance.new("Frame")
+	frame.Name = "MainFrame"
+	frame.Size = self.size
+	frame.Position = self.position
+	frame.BackgroundColor3 = self.colors.background
+	frame.BorderSizePixel = 0
+	frame.ClipsDescendants = true
+	frame.Parent = self.mainFrame
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 8)
+	corner.Parent = frame
+
+	self.mainFrame.Parent = game:GetService("Players").LocalPlayer.PlayerGui
+	self.mainFrameInstance = frame
+end
+
+function ModernMenu:createTopBar()
+	local topBar = Instance.new("Frame")
+	topBar.Name = "TopBar"
+	topBar.Size = UDim2.new(1, 0, 0, 30)
+	topBar.BackgroundColor3 = self.colors.topBar
+	topBar.BorderSizePixel = 0
+	topBar.Parent = self.mainFrameInstance
+
+	local title = Instance.new("TextLabel")
+	title.Name = "Title"
+	title.Size = UDim2.new(0.6, 0, 1, 0)
+	title.Position = UDim2.new(0.05, 0, 0, 0)
+	title.BackgroundTransparency = 1
+	title.Text = self.title
+	title.TextColor3 = self.colors.text
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.Font = Enum.Font.GothamSemibold
+	title.TextSize = 14
+	title.Parent = topBar
+
+	local closeButton = Instance.new("TextButton")
+	closeButton.Name = "CloseButton"
+	closeButton.Size = UDim2.new(0, 30, 0, 30)
+	closeButton.Position = UDim2.new(1, -30, 0, 0)
+	closeButton.BackgroundTransparency = 1
+	closeButton.Text = "X"
+	closeButton.TextColor3 = self.colors.text
+	closeButton.Font = Enum.Font.GothamBold
+	closeButton.TextSize = 14
+	closeButton.Parent = topBar
+
+	local settingsButton = Instance.new("TextButton")
+	settingsButton.Name = "SettingsButton"
+	settingsButton.Size = UDim2.new(0, 30, 0, 30)
+	settingsButton.Position = UDim2.new(1, -60, 0, 0)
+	settingsButton.BackgroundTransparency = 1
+	settingsButton.Text = "⚙"
+	settingsButton.TextColor3 = self.colors.text
+	settingsButton.Font = Enum.Font.GothamBold
+	settingsButton.TextSize = 14
+	settingsButton.Parent = topBar
+
+	-- Make window draggable
+	local dragging
+	local dragInput
+	local dragStart
+	local startPos
+
+	local function update(input)
+		local delta = input.Position - dragStart
+		self.mainFrameInstance.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+	end
+
+	topBar.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+			dragStart = input.Position
+			startPos = self.mainFrameInstance.Position
+
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					dragging = false
+				end
+			end)
+		end
+	end)
+
+	topBar.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement then
+			dragInput = input
+		end
+	end)
+
+	game:GetService("UserInputService").InputChanged:Connect(function(input)
+		if input == dragInput and dragging then
+			update(input)
+		end
+	end)
+
+	-- Close button functionality
+	closeButton.MouseButton1Click:Connect(function()
+		self.mainFrame.Enabled = not self.mainFrame.Enabled
+	end)
+
+	-- Settings button functionality
+	settingsButton.MouseButton1Click:Connect(function()
+		self:toggleSettings()
+	end)
+end
+
+function ModernMenu:createSectionsFrame()
+	local sectionsFrame = Instance.new("Frame")
+	sectionsFrame.Name = "SectionsFrame"
+	sectionsFrame.Size = UDim2.new(0.3, 0, 1, -30)
+	sectionsFrame.Position = UDim2.new(0, 0, 0, 30)
+	sectionsFrame.BackgroundColor3 = self.colors.sectionBackground
+	sectionsFrame.BorderSizePixel = 0
+	sectionsFrame.Parent = self.mainFrameInstance
+
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 5)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = sectionsFrame
+
+	self.sectionsFrame = sectionsFrame
+end
+
+function ModernMenu:createContentFrame()
+	local contentFrame = Instance.new("ScrollingFrame")
+	contentFrame.Name = "ContentFrame"
+	contentFrame.Size = UDim2.new(0.7, 0, 1, -30)
+	contentFrame.Position = UDim2.new(0.3, 0, 0, 30)
+	contentFrame.BackgroundTransparency = 1
+	contentFrame.BorderSizePixel = 0
+	contentFrame.ScrollBarThickness = 3
+	contentFrame.ScrollBarImageColor3 = self.colors.accent
+	contentFrame.Parent = self.mainFrameInstance
+
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 10)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = contentFrame
+
+	local padding = Instance.new("UIPadding")
+	padding.PaddingTop = UDim.new(0, 10)
+	padding.PaddingLeft = UDim.new(0, 10)
+	padding.PaddingRight = UDim.new(0, 10)
+	padding.Parent = contentFrame
+
+	self.contentFrame = contentFrame
+end
+
+function ModernMenu:createSettingsMenu()
+	self.settingsFrame = Instance.new("ScreenGui")
+	self.settingsFrame.Name = "ModernMenuSettings"
+	self.settingsFrame.ResetOnSpawn = false
+	self.settingsFrame.ZIndexBehavior = Enum.ZIndexBehavior.Global
+	self.settingsFrame.IgnoreGuiInset = true
+
+	local frame = Instance.new("Frame")
+	frame.Name = "SettingsFrame"
+	frame.Size = UDim2.new(0, 300, 0, 400)
+	frame.Position = UDim2.new(0.5, -150, 0.5, -200)
+	frame.BackgroundColor3 = self.colors.background
+	frame.BorderSizePixel = 0
+	frame.ClipsDescendants = true
+	frame.Visible = false
+	frame.Parent = self.settingsFrame
+
+	local backgroundBlocker = Instance.new("TextButton")
+	backgroundBlocker.Name = "BackgroundBlocker"
+	backgroundBlocker.Size = UDim2.new(10, 0, 10, 0)
+	backgroundBlocker.Position = UDim2.new(-5, 0, -5, 0)
+	backgroundBlocker.BackgroundColor3 = Color3.new(0, 0, 0)
+	backgroundBlocker.BackgroundTransparency = 0.5
+	backgroundBlocker.BorderSizePixel = 0
+	backgroundBlocker.Text = ""
+	backgroundBlocker.ZIndex = 0
+	backgroundBlocker.Visible = false
+	backgroundBlocker.Parent = self.settingsFrame
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 8)
+	corner.Parent = frame
+
+	-- Top bar with drag functionality
+	local topBar = Instance.new("Frame")
+	topBar.Name = "TopBar"
+	topBar.Size = UDim2.new(1, 0, 0, 30)
+	topBar.BackgroundColor3 = self.colors.topBar
+	topBar.BorderSizePixel = 0
+	topBar.Parent = frame
+
+	-- Make settings window draggable
+	local dragging
+	local dragInput
+	local dragStart
+	local startPos
+
+	local function update(input)
+		local delta = input.Position - dragStart
+		frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+	end
+
+	topBar.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+			dragStart = input.Position
+			startPos = frame.Position
+
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					dragging = false
+				end
+			end)
+		end
+	end)
+
+	topBar.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement then
+			dragInput = input
+		end
+	end)
+
+	game:GetService("UserInputService").InputChanged:Connect(function(input)
+		if input == dragInput and dragging then
+			update(input)
+		end
+	end)
+
+	local title = Instance.new("TextLabel")
+	title.Name = "Title"
+	title.Size = UDim2.new(0.6, 0, 1, 0)
+	title.Position = UDim2.new(0.05, 0, 0, 0)
+	title.BackgroundTransparency = 1
+	title.Text = "Menu Settings"
+	title.TextColor3 = self.colors.text
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.Font = Enum.Font.GothamSemibold
+	title.TextSize = 14
+	title.Parent = topBar
+
+	local closeButton = Instance.new("TextButton")
+	closeButton.Name = "CloseButton"
+	closeButton.Size = UDim2.new(0, 30, 0, 30)
+	closeButton.Position = UDim2.new(1, -30, 0, 0)
+	closeButton.BackgroundTransparency = 1
+	closeButton.Text = "X"
+	closeButton.TextColor3 = self.colors.text
+	closeButton.Font = Enum.Font.GothamBold
+	closeButton.TextSize = 14
+	closeButton.Parent = topBar
+
+	local contentFrame = Instance.new("ScrollingFrame")
+	contentFrame.Name = "ContentFrame"
+	contentFrame.Size = UDim2.new(1, 0, 1, -30)
+	contentFrame.Position = UDim2.new(0, 0, 0, 30)
+	contentFrame.BackgroundTransparency = 1
+	contentFrame.BorderSizePixel = 0
+	contentFrame.ScrollBarThickness = 3
+	contentFrame.ScrollBarImageColor3 = self.colors.accent
+	contentFrame.Parent = frame
+
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 10)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = contentFrame
+
+	local padding = Instance.new("UIPadding")
+	padding.PaddingTop = UDim.new(0, 10)
+	padding.PaddingLeft = UDim.new(0, 10)
+	padding.PaddingRight = UDim.new(0, 10)
+	padding.Parent = contentFrame
+
+	-- Add color customization options
+	for colorName, colorValue in pairs(defaultColors) do
+		local colorPicker = self:createColorPicker(colorName, colorValue, contentFrame)
+		self.colorPickers[colorName] = colorPicker
+	end
+
+	closeButton.MouseButton1Click:Connect(function()
+		self:toggleSettings()
+	end)
+
+	backgroundBlocker.MouseButton1Click:Connect(function()
+		self:toggleSettings()
+	end)
+
+	self.settingsFrame.Parent = game:GetService("Players").LocalPlayer.PlayerGui
+	self.settingsContentFrame = contentFrame
+end
+
+function ModernMenu:createColorPicker(name, defaultColor, parent)
+	local frame = Instance.new("Frame")
+	frame.Name = name .. "ColorPicker"
+	frame.Size = UDim2.new(1, -20, 0, 30)
+	frame.BackgroundTransparency = 1
+	frame.Parent = parent
+
+	local label = Instance.new("TextLabel")
+	label.Name = "Label"
+	label.Size = UDim2.new(0.4, 0, 1, 0)
+	label.BackgroundTransparency = 1
+	label.Text = name:gsub("^%l", string.upper)
+	label.TextColor3 = self.colors.text
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Font = Enum.Font.Gotham
+	label.TextSize = 12
+	label.Parent = frame
+
+	local colorBox = Instance.new("TextButton")
+	colorBox.Name = "ColorBox"
+	colorBox.Size = UDim2.new(0.3, 0, 0.8, 0)
+	colorBox.Position = UDim2.new(0.4, 0, 0.1, 0)
+	colorBox.BackgroundColor3 = self.colors[name] or defaultColor
+	colorBox.BorderSizePixel = 0
+	colorBox.Text = ""
+	colorBox.Parent = frame
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 4)
+	corner.Parent = colorBox
+
+	colorBox.MouseButton1Click:Connect(function()
+		-- Remove previous color picker if exists
+		if self.currentColorPicker then
+			self.currentColorPicker:Destroy()
+			self.currentColorPicker = nil
+		end
+
+		local colorPicker = Instance.new("Frame")
+		colorPicker.Name = "ColorPickerPopup"
+		colorPicker.Size = UDim2.new(0, 200, 0, 200)
+		colorPicker.Position = UDim2.new(0.5, -100, 0.5, -100)
+		colorPicker.BackgroundColor3 = self.colors.background
+		colorPicker.BorderSizePixel = 0
+		colorPicker.Parent = self.settingsFrame
+
+		-- Make color picker draggable
+		local dragFrame = Instance.new("Frame")
+		dragFrame.Name = "DragFrame"
+		dragFrame.Size = UDim2.new(1, 0, 0, 20)
+		dragFrame.BackgroundTransparency = 1
+		dragFrame.Parent = colorPicker
+
+		local dragging
+		local dragInput
+		local dragStart
+		local startPos
+
+		local function update(input)
+			local delta = input.Position - dragStart
+			colorPicker.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, 
+				startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+
+		dragFrame.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 then
+				dragging = true
+				dragStart = input.Position
+				startPos = colorPicker.Position
+
+				input.Changed:Connect(function()
+					if input.UserInputState == Enum.UserInputState.End then
+						dragging = false
+					end
+				end)
+			end
+		end)
+
+		dragFrame.InputChanged:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseMovement then
+				dragInput = input
+			end
+		end)
+
+		game:GetService("UserInputService").InputChanged:Connect(function(input)
+			if input == dragInput and dragging then
+				update(input)
+			end
+		end)
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 8)
+		corner.Parent = colorPicker
+
+		-- Current color display
+		local currentColor = Instance.new("Frame")
+		currentColor.Name = "CurrentColor"
+		currentColor.Size = UDim2.new(0.8, 0, 0.2, 0)
+		currentColor.Position = UDim2.new(0.1, 0, 0.3, 0)
+		currentColor.BackgroundColor3 = colorBox.BackgroundColor3
+		currentColor.BorderSizePixel = 0
+		currentColor.Parent = colorPicker
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 4)
+		corner.Parent = currentColor
+
+		-- Color sliders
+		local redSlider = self:createColorSlider("Red", 0, colorPicker, UDim2.new(0.1, 0, 0.5, 0))
+		local greenSlider = self:createColorSlider("Green", 1, colorPicker, UDim2.new(0.1, 0, 0.7, 0))
+		local blueSlider = self:createColorSlider("Blue", 2, colorPicker, UDim2.new(0.1, 0, 0.9, 0))
+
+		-- Update function
+		local function updateColor()
+			local newColor = Color3.new(redSlider.currentValue, greenSlider.currentValue, blueSlider.currentValue)
+			currentColor.BackgroundColor3 = newColor
+			colorBox.BackgroundColor3 = newColor
+			self:setColor(name, newColor)
+		end
+
+		-- Set initial values
+		local r, g, b = colorBox.BackgroundColor3.r, colorBox.BackgroundColor3.g, colorBox.BackgroundColor3.b
+		redSlider:setValue(r)
+		greenSlider:setValue(g)
+		blueSlider:setValue(b)
+
+		-- Connect sliders
+		redSlider.callback = updateColor
+		greenSlider.callback = updateColor
+		blueSlider.callback = updateColor
+
+		local closeButton = Instance.new("TextButton")
+		closeButton.Name = "CloseButton"
+		closeButton.Size = UDim2.new(0, 30, 0, 30)
+		closeButton.Position = UDim2.new(1, -30, 0, 0)
+		closeButton.BackgroundTransparency = 1
+		closeButton.Text = "X"
+		closeButton.TextColor3 = self.colors.text
+		closeButton.Font = Enum.Font.GothamBold
+		closeButton.TextSize = 14
+		closeButton.Parent = colorPicker
+
+		closeButton.MouseButton1Click:Connect(function()
+			colorPicker:Destroy()
+			self.currentColorPicker = nil
+		end)
+
+		self.currentColorPicker = colorPicker
+	end)
+
+	return frame
+end
+
+function ModernMenu:createColorSlider(label, index, parent, position)
+	local frame = Instance.new("Frame")
+	frame.Name = label .. "Slider"
+	frame.Size = UDim2.new(0.8, 0, 0.1, 0)
+	frame.Position = position
+	frame.BackgroundTransparency = 1
+	frame.Parent = parent
+
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Name = "Label"
+	nameLabel.Size = UDim2.new(0.3, 0, 1, 0)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Text = label
+	nameLabel.TextColor3 = self.colors.text
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.Font = Enum.Font.Gotham
+	nameLabel.TextSize = 12
+	nameLabel.Parent = frame
+
+	local sliderBackground = Instance.new("Frame")
+	sliderBackground.Name = "SliderBackground"
+	sliderBackground.Size = UDim2.new(0.5, 0, 0.6, 0)
+	sliderBackground.Position = UDim2.new(0.3, 0, 0.2, 0)
+	sliderBackground.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+	sliderBackground.BorderSizePixel = 0
+	sliderBackground.Parent = frame
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0.5, 0)
+	corner.Parent = sliderBackground
+
+	local sliderFill = Instance.new("Frame")
+	sliderFill.Name = "SliderFill"
+	sliderFill.Size = UDim2.new(0.5, 0, 1, 0)
+	sliderFill.BackgroundColor3 = index == 0 and Color3.fromRGB(255, 0, 0) 
+		or index == 1 and Color3.fromRGB(0, 255, 0) 
+		or Color3.fromRGB(0, 0, 255)
+	sliderFill.BorderSizePixel = 0
+	sliderFill.Parent = sliderBackground
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0.5, 0)
+	corner.Parent = sliderFill
+
+	local valueLabel = Instance.new("TextLabel")
+	valueLabel.Name = "ValueLabel"
+	valueLabel.Size = UDim2.new(0.2, 0, 1, 0)
+	valueLabel.Position = UDim2.new(0.8, 5, 0, 0)
+	valueLabel.BackgroundTransparency = 1
+	valueLabel.Text = "0"
+	valueLabel.TextColor3 = self.colors.text
+	valueLabel.TextXAlignment = Enum.TextXAlignment.Left
+	valueLabel.Font = Enum.Font.Gotham
+	valueLabel.TextSize = 12
+	valueLabel.Parent = frame
+
+	local slider = {
+		frame = frame,
+		currentValue = 0,
+		callback = nil,
+
+		setValue = function(self, value)
+			self.currentValue = value
+			sliderFill.Size = UDim2.new(value, 0, 1, 0)
+			valueLabel.Text = string.format("%.2f", value)
+		end
+	}
+
+	local dragging = false
+
+	local function updateSlider(input)
+		local x = (input.Position.X - sliderBackground.AbsolutePosition.X) / sliderBackground.AbsoluteSize.X
+		x = math.clamp(x, 0, 1)
+		slider:setValue(x)
+
+		if slider.callback then
+			slider.callback()
+		end
+	end
+
+	sliderBackground.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+			updateSlider(input)
+		end
+	end)
+
+	sliderBackground.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = false
+		end
+	end)
+
+	game:GetService("UserInputService").InputChanged:Connect(function(input)
+		if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+			updateSlider(input)
+		end
+	end)
+
+	return slider
+end
+
+function ModernMenu:toggleSettings()
+	self.settingsOpen = not self.settingsOpen
+	self.settingsFrame.SettingsFrame.Visible = self.settingsOpen
+	self.settingsFrame.BackgroundBlocker.Visible = self.settingsOpen
+	self.modalWindowOpen = self.settingsOpen
+end
+
+function ModernMenu:addSection(name)
+	local sectionButton = Instance.new("TextButton")
+	sectionButton.Name = name .. "Section"
+	sectionButton.Size = UDim2.new(1, -10, 0, 30)
+	sectionButton.Position = UDim2.new(0, 5, 0, 5 + (#self.sections * 35))
+	sectionButton.BackgroundColor3 = self.colors.background
+	sectionButton.BorderSizePixel = 0
+	sectionButton.Text = name
+	sectionButton.TextColor3 = self.colors.text
+	sectionButton.Font = Enum.Font.Gotham
+	sectionButton.TextSize = 12
+	sectionButton.Parent = self.sectionsFrame
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 4)
+	corner.Parent = sectionButton
+
+	local section = {
+		name = name,
+		buttons = {}
+	}
+
+	table.insert(self.sections, section)
+
+	if #self.sections == 1 then
+		self:setSection(name)
+	end
+
+	sectionButton.MouseButton1Click:Connect(function()
+		self:setSection(name)
+	end)
+
+	return section
+end
+
+function ModernMenu:setSection(name)
+	for _, section in ipairs(self.sections) do
+		if section.name == name then
+			self.currentSection = section
+			self:updateContent()
+			break
+		end
+	end
+end
+
+function ModernMenu:updateContent()
+	-- Clear current content (except layout and padding)
+	for _, control in pairs(self.controls) do
+		if control and control.Parent == self.contentFrame then
+			control:Destroy()
+		end
+	end
+	self.controls = {}
+
+	if not self.currentSection then return end
+
+	-- Create controls for current section
+	for _, button in ipairs(self.currentSection.buttons) do
+		local control
+		if button.type == "TitleSection" then
+			control = self:createTitleSection(button.text, button.id)
+		elseif button.type == "ActiveButton" then
+			control = self:createActiveButton(button.text, button.callback, button.id)
+		elseif button.type == "ToggleButton" then
+			control = self:createToggleButton(button.text, button.default, button.callback, button.id, button.currentState)
+		elseif button.type == "SliderButton" then
+			control = self:createSliderButton(button.text, button.min, button.max, button.default, button.callback, button.id, button.currentValue)
+		elseif button.type == "TextBoxButton" then
+			control = self:createTextBoxButton(button.text, button.placeholder, button.callback, button.id, button.currentText)
+		end
+
+		if control then
+			table.insert(self.controls, control)
+			control.Parent = self.contentFrame
+		end
+	end
+end
+
+function ModernMenu:createTitleSection(text, id)
+	id = id or "TitleSection_"..text
+
+	local frame = Instance.new("Frame")
+	frame.Name = id
+	frame.Size = UDim2.new(1, -20, 0, 30)
+	frame.BackgroundTransparency = 1
+
+	local label = Instance.new("TextLabel")
+	label.Name = "Label"
+	label.Size = UDim2.new(1, 0, 1, 0)
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.TextColor3 = self.colors.text
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Font = Enum.Font.GothamSemibold
+	label.TextSize = 14
+	label.Parent = frame
+
+	return frame
+end
+
+function ModernMenu:TitleSection(text)
+	local id = "TitleSection_"..text
+	if not self.currentSection then return end
+
+	table.insert(self.currentSection.buttons, {
+		type = "TitleSection",
+		text = text,
+		id = id
+	})
+
+	if self.currentSection.name == self.currentSection then
+		local control = self:createTitleSection(text, id)
+		table.insert(self.controls, control)
+		control.Parent = self.contentFrame
+	end
+
+	return id
+end
+
+function ModernMenu:createActiveButton(text, callback, id)
+	id = id or "ActiveButton_"..text
+
+	local button = Instance.new("TextButton")
+	button.Name = id
+	button.Size = UDim2.new(1, -20, 0, 30)
+	button.BackgroundColor3 = self.colors.accent
+	button.BorderSizePixel = 0
+	button.Text = text
+	button.TextColor3 = self.colors.text
+	button.Font = Enum.Font.Gotham
+	button.TextSize = 12
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 4)
+	corner.Parent = button
+
+	button.MouseButton1Click:Connect(function()
+		if callback then
+			callback()
+		end
+	end)
+
+	return button
+end
+
+function ModernMenu:ActiveButton(text, callback)
+	local id = "ActiveButton_"..text
+	if not self.currentSection then return end
+
+	table.insert(self.currentSection.buttons, {
+		type = "ActiveButton",
+		text = text,
+		callback = callback,
+		id = id
+	})
+
+	if self.currentSection.name == self.currentSection then
+		local control = self:createActiveButton(text, callback, id)
+		table.insert(self.controls, control)
+		control.Parent = self.contentFrame
+	end
+
+	return id
+end
+
+function ModernMenu:createToggleButton(text, default, callback, id, currentState)
+	id = id or "ToggleButton_"..text
+	currentState = currentState or default or false
+
+	local frame = Instance.new("Frame")
+	frame.Name = id
+	frame.Size = UDim2.new(1, -20, 0, 30)
+	frame.BackgroundTransparency = 1
+
+	local label = Instance.new("TextLabel")
+	label.Name = "Label"
+	label.Size = UDim2.new(0.7, 0, 1, 0)
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.TextColor3 = self.colors.text
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Font = Enum.Font.Gotham
+	label.TextSize = 12
+	label.Parent = frame
+
+	local toggle = Instance.new("Frame")
+	toggle.Name = "Toggle"
+	toggle.Size = UDim2.new(0.2, 0, 0.6, 0)
+	toggle.Position = UDim2.new(0.75, 0, 0.2, 0)
+	toggle.BackgroundColor3 = currentState and self.colors.toggleOn or self.colors.toggleOff
+	toggle.BorderSizePixel = 0
+	toggle.Parent = frame
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0.5, 0)
+	corner.Parent = toggle
+
+	frame.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			currentState = not currentState
+			toggle.BackgroundColor3 = currentState and self.colors.toggleOn or self.colors.toggleOff
+
+			-- Update state in section data
+			for _, btn in ipairs(self.currentSection.buttons) do
+				if btn.id == id then
+					btn.currentState = currentState
+					break
+				end
+			end
+
+			if callback then
+				callback(currentState)
+			end
+		end
+	end)
+
+	return frame
+end
+
+function ModernMenu:ToggleButton(text, default, callback)
+	local id = "ToggleButton_"..text
+	if not self.currentSection then return end
+
+	table.insert(self.currentSection.buttons, {
+		type = "ToggleButton",
+		text = text,
+		default = default,
+		callback = callback,
+		id = id,
+		currentState = default
+	})
+
+	if self.currentSection.name == self.currentSection then
+		local control = self:createToggleButton(text, default, callback, id, default)
+		table.insert(self.controls, control)
+		control.Parent = self.contentFrame
+	end
+
+	return id
+end
+
+function ModernMenu:createSliderButton(text, min, max, default, callback, id, currentValue)
+	id = id or "SliderButton_"..text
+	currentValue = currentValue or default or min
+
+	local frame = Instance.new("Frame")
+	frame.Name = id
+	frame.Size = UDim2.new(1, -20, 0, 50)
+	frame.BackgroundTransparency = 1
+
+	local label = Instance.new("TextLabel")
+	label.Name = "Label"
+	label.Size = UDim2.new(1, 0, 0.4, 0)
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.TextColor3 = self.colors.text
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Font = Enum.Font.Gotham
+	label.TextSize = 12
+	label.Parent = frame
+
+	local sliderBackground = Instance.new("Frame")
+	sliderBackground.Name = "SliderBackground"
+	sliderBackground.Size = UDim2.new(1, 0, 0.3, 0)
+	sliderBackground.Position = UDim2.new(0, 0, 0.5, 0)
+	sliderBackground.BackgroundColor3 = self.colors.sliderBackground
+	sliderBackground.BorderSizePixel = 0
+	sliderBackground.Parent = frame
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0.5, 0)
+	corner.Parent = sliderBackground
+
+	local sliderFill = Instance.new("Frame")
+	sliderFill.Name = "SliderFill"
+	sliderFill.Size = UDim2.new((currentValue - min) / (max - min), 0, 1, 0)
+	sliderFill.BackgroundColor3 = self.colors.sliderFill
+	sliderFill.BorderSizePixel = 0
+	sliderFill.Parent = sliderBackground
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0.5, 0)
+	corner.Parent = sliderFill
+
+	local valueLabel = Instance.new("TextLabel")
+	valueLabel.Name = "ValueLabel"
+	valueLabel.Size = UDim2.new(1, 0, 0.3, 0)
+	valueLabel.Position = UDim2.new(0, 0, 0.8, 0)
+	valueLabel.BackgroundTransparency = 1
+	valueLabel.Text = tostring(currentValue)
+	valueLabel.TextColor3 = self.colors.text
+	valueLabel.TextXAlignment = Enum.TextXAlignment.Right
+	valueLabel.Font = Enum.Font.Gotham
+	valueLabel.TextSize = 12
+	valueLabel.Parent = frame
+
+	local dragging = false
+
+	local function updateSlider(input)
+		local x = (input.Position.X - sliderBackground.AbsolutePosition.X) / sliderBackground.AbsoluteSize.X
+		x = math.clamp(x, 0, 1)
+		currentValue = min + (max - min) * x
+		currentValue = math.floor(currentValue * 100) / 100 -- Round to 2 decimal places
+
+		sliderFill.Size = UDim2.new(x, 0, 1, 0)
+		valueLabel.Text = tostring(currentValue)
+
+		-- Update value in section data
+		for _, btn in ipairs(self.currentSection.buttons) do
+			if btn.id == id then
+				btn.currentValue = currentValue
+				break
+			end
+		end
+
+		if callback then
+			callback(currentValue)
+		end
+	end
+
+	sliderBackground.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+			updateSlider(input)
+		end
+	end)
+
+	sliderBackground.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = false
+		end
+	end)
+
+	game:GetService("UserInputService").InputChanged:Connect(function(input)
+		if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+			updateSlider(input)
+		end
+	end)
+
+	return frame
+end
+
+function ModernMenu:SliderButton(text, min, max, default, callback)
+	local id = "SliderButton_"..text
+	if not self.currentSection then return end
+
+	table.insert(self.currentSection.buttons, {
+		type = "SliderButton",
+		text = text,
+		min = min,
+		max = max,
+		default = default,
+		callback = callback,
+		id = id,
+		currentValue = default
+	})
+
+	if self.currentSection.name == self.currentSection then
+		local control = self:createSliderButton(text, min, max, default, callback, id, default)
+		table.insert(self.controls, control)
+		control.Parent = self.contentFrame
+	end
+
+	return id
+end
+
+function ModernMenu:createTextBoxButton(text, placeholder, callback, id, currentText)
+	id = id or "TextBoxButton_"..text
+	currentText = currentText or ""
+
+	local frame = Instance.new("Frame")
+	frame.Name = id
+	frame.Size = UDim2.new(1, -20, 0, 60)  -- Увеличили высоту для лучшего отображения
+	frame.BackgroundTransparency = 1
+
+	-- Заголовок
+	local label = Instance.new("TextLabel")
+	label.Name = "Label"
+	label.Size = UDim2.new(1, 0, 0.3, 0)  -- 30% высоты под заголовок
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.TextColor3 = self.colors.text
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Font = Enum.Font.Gotham
+	label.TextSize = 12
+	label.Parent = frame
+
+	-- Контейнер для поля ввода и кнопки
+	local container = Instance.new("Frame")
+	container.Name = "InputContainer"
+	container.Size = UDim2.new(1, 0, 0.7, 0)  -- 70% высоты под ввод
+	container.Position = UDim2.new(0, 0, 0.3, 0)
+	container.BackgroundTransparency = 1
+	container.Parent = frame
+
+	-- Поле ввода текста (занимает 70% ширины контейнера)
+	local textBox = Instance.new("TextBox")
+	textBox.Name = "TextBox"
+	textBox.Size = UDim2.new(0.7, -5, 1, 0)
+	textBox.Position = UDim2.new(0, 0, 0, 0)
+	textBox.BackgroundColor3 = self.colors.textBoxBackground
+	textBox.BorderSizePixel = 0
+	textBox.Text = currentText
+	textBox.PlaceholderText = placeholder or "Enter text..."
+	textBox.TextColor3 = self.colors.text
+	textBox.Font = Enum.Font.Gotham
+	textBox.TextSize = 12
+	textBox.Parent = container
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 4)
+	corner.Parent = textBox
+
+	local padding = Instance.new("UIPadding")
+	padding.PaddingLeft = UDim.new(0, 5)
+	padding.PaddingRight = UDim.new(0, 5)
+	padding.Parent = textBox
+
+	-- Кнопка активации (занимает 30% ширины контейнера)
+	local activateButton = Instance.new("TextButton")
+	activateButton.Name = "ActivateButton"
+	activateButton.Size = UDim2.new(0.3, 0, 1, 0)
+	activateButton.Position = UDim2.new(0.7, 5, 0, 0)
+	activateButton.BackgroundColor3 = self.colors.accent
+	activateButton.BorderSizePixel = 0
+	activateButton.Text = "Apply"  -- Можно изменить через параметр
+	activateButton.TextColor3 = self.colors.text
+	activateButton.Font = Enum.Font.Gotham
+	activateButton.TextSize = 12
+	activateButton.Parent = container
+
+	local buttonCorner = Instance.new("UICorner")
+	buttonCorner.CornerRadius = UDim.new(0, 4)
+	buttonCorner.Parent = activateButton
+
+	-- Обработчики событий
+	local function handleActivation()
+		if callback and textBox.Text ~= "" then
+			callback(textBox.Text)
+		end
+	end
+
+	activateButton.MouseButton1Click:Connect(handleActivation)
+
+	textBox.FocusLost:Connect(function(enterPressed)
+		if enterPressed then
+			handleActivation()
+		end
+	end)
+
+	return frame
+end
+
+-- Новая функция для создания кнопки привязки
+function ModernMenu:createBindButton(text, defaultKey, callback, id)
+	id = id or "BindButton_"..text
+
+	local frame = Instance.new("Frame")
+	frame.Name = id
+	frame.Size = UDim2.new(1, -20, 0, 30)
+	frame.BackgroundTransparency = 1
+
+	local label = Instance.new("TextLabel")
+	label.Name = "Label"
+	label.Size = UDim2.new(0.5, 0, 1, 0)
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.TextColor3 = self.colors.text
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Font = Enum.Font.Gotham
+	label.TextSize = 12
+	label.Parent = frame
+
+	local button = Instance.new("TextButton")
+	button.Name = "BindButton"
+	button.Size = UDim2.new(0.4, 0, 0.8, 0)
+	button.Position = UDim2.new(0.55, 0, 0.1, 0)
+	button.BackgroundColor3 = self.colors.bindButton
+	button.BorderSizePixel = 0
+	button.Text = tostring(defaultKey):gsub("Enum.KeyCode.", "") or "None"
+	button.TextColor3 = self.colors.text
+	button.Font = Enum.Font.Gotham
+	button.TextSize = 12
+	button.Parent = frame
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 4)
+	corner.Parent = button
+
+	button.MouseButton1Click:Connect(function()
+		if self.modalWindowOpen then return end
+
+		if self.waitingForBind then
+			self.waitingForBind.button.Text = tostring(self.waitingForBind.currentKey):gsub("Enum.KeyCode.", "")
+		end
+
+		self.waitingForBind = {
+			button = button,
+			callback = callback,
+			currentKey = defaultKey
+		}
+
+		button.Text = "[Press any key]"
+	end)
+
+	return frame
+end
+
+-- BindActiveButton - кнопка с привязкой клавиши для активации
+function ModernMenu:BindActiveButton(text, defaultKey, callback)
+	local id = "BindActiveButton_"..text
+	if not self.currentSection then return end
+
+	local control = self:createBindButton(text, defaultKey, callback, id)
+
+	table.insert(self.currentSection.buttons, {
+		type = "BindActiveButton",
+		text = text,
+		callback = callback,
+		id = id,
+		currentKey = defaultKey
+	})
+
+	table.insert(self.controls, control)
+	control.Parent = self.contentFrame
+
+	return {
+		frame = control,
+		button = control.BindButton,
+		id = id
+	}
+end
+
+-- BindToggleButton - переключатель с привязкой клавиши
+function ModernMenu:BindToggleButton(text, defaultKey, defaultState, callback)
+	local id = "BindToggleButton_"..text
+	if not self.currentSection then return end
+
+	local frame = Instance.new("Frame")
+	frame.Name = id
+	frame.Size = UDim2.new(1, -20, 0, 30)
+	frame.BackgroundTransparency = 1
+
+	local label = Instance.new("TextLabel")
+	label.Name = "Label"
+	label.Size = UDim2.new(0.4, 0, 1, 0)
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.TextColor3 = self.colors.text
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Font = Enum.Font.Gotham
+	label.TextSize = 12
+	label.Parent = frame
+
+	local toggle = Instance.new("Frame")
+	toggle.Name = "Toggle"
+	toggle.Size = UDim2.new(0.15, 0, 0.6, 0)
+	toggle.Position = UDim2.new(0.4, 0, 0.2, 0)
+	toggle.BackgroundColor3 = defaultState and self.colors.toggleOn or self.colors.toggleOff
+	toggle.BorderSizePixel = 0
+	toggle.Parent = frame
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0.5, 0)
+	corner.Parent = toggle
+
+	local bindButton = Instance.new("TextButton")
+	bindButton.Name = "BindButton"
+	bindButton.Size = UDim2.new(0.3, 0, 0.8, 0)
+	bindButton.Position = UDim2.new(0.6, 5, 0.1, 0)
+	bindButton.BackgroundColor3 = self.colors.bindButton
+	bindButton.BorderSizePixel = 0
+	bindButton.Text = tostring(defaultKey):gsub("Enum.KeyCode.", "") or "None"
+	bindButton.TextColor3 = self.colors.text
+	bindButton.Font = Enum.Font.Gotham
+	bindButton.TextSize = 12
+	bindButton.Parent = frame
+
+	local buttonCorner = Instance.new("UICorner")
+	buttonCorner.CornerRadius = UDim.new(0, 4)
+	buttonCorner.Parent = bindButton
+
+	local currentState = defaultState or false
+
+	-- Обработчик переключения
+	frame.InputBegan:Connect(function(input)
+		if not self:shouldProcessInput() then return end
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			currentState = not currentState
+			toggle.BackgroundColor3 = currentState and self.colors.toggleOn or self.colors.toggleOff
+			if callback then
+				callback(currentState)
+			end
+		end
+	end)
+
+	-- Обработчик привязки клавиши
+	bindButton.MouseButton1Click:Connect(function()
+		if self.modalWindowOpen then return end
+
+		if self.waitingForBind then
+			self.waitingForBind.button.Text = tostring(self.waitingForBind.currentKey):gsub("Enum.KeyCode.", "")
+		end
+
+		self.waitingForBind = {
+			button = bindButton,
+			callback = function(key)
+				-- Сохраняем новую клавишу
+				for _, btn in ipairs(self.currentSection.buttons) do
+					if btn.id == id then
+						btn.currentKey = key
+						break
+					end
+				end
+			end,
+			currentKey = defaultKey
+		}
+
+		bindButton.Text = "[Press any key]"
+	end)
+
+	table.insert(self.currentSection.buttons, {
+		type = "BindToggleButton",
+		text = text,
+		callback = callback,
+		id = id,
+		currentState = currentState,
+		currentKey = defaultKey
+	})
+
+	table.insert(self.controls, frame)
+	frame.Parent = self.contentFrame
+
+	return {
+		frame = frame,
+		toggle = toggle,
+		bindButton = bindButton,
+		id = id
+	}
+end
+
+function ModernMenu:shouldProcessInput()
+	return not self.modalWindowOpen and not self.waitingForBind
+end
+
+function ModernMenu:TextBoxButton(text, placeholder, callback, buttonText)
+	local id = "TextBoxButton_"..text
+	if not self.currentSection then return end
+
+	local control = self:createTextBoxButton(text, placeholder, callback, id, "")
+
+	-- Устанавливаем текст кнопки если передан
+	if buttonText then
+		local button = control.InputContainer.ActivateButton
+		if button then
+			button.Text = buttonText
+		end
+	end
+
+	table.insert(self.currentSection.buttons, {
+		type = "TextBoxButton",
+		text = text,
+		placeholder = placeholder,
+		callback = callback,
+		id = id,
+		currentText = ""
+	})
+
+	table.insert(self.controls, control)
+	control.Parent = self.contentFrame
+
+	return {
+		frame = control,
+		textBox = control.InputContainer.TextBox,
+		button = control.InputContainer.ActivateButton,
+		id = id
+	}
+end
+
+function ModernMenu:setColor(colorName, colorValue)
+	if self.colors[colorName] then
+		self.colors[colorName] = colorValue
+
+		-- Обновляем цвет в соответствующем пикере
+		if self.colorPickers[colorName] then
+			self.colorPickers[colorName].ColorBox.BackgroundColor3 = colorValue
+		end
+
+		-- Обновляем все цвета в интерфейсе
+		self:updateColors()
+	end
+end
+
+function ModernMenu:updateColors()
+	-- Update main frame colors
+	self.mainFrameInstance.BackgroundColor3 = self.colors.background
+	self.mainFrameInstance.TopBar.BackgroundColor3 = self.colors.topBar
+	self.mainFrameInstance.TopBar.Title.TextColor3 = self.colors.text
+	self.mainFrameInstance.TopBar.CloseButton.TextColor3 = self.colors.text
+	self.mainFrameInstance.TopBar.SettingsButton.TextColor3 = self.colors.text
+	self.mainFrameInstance.SectionsFrame.BackgroundColor3 = self.colors.sectionBackground
+	self.mainFrameInstance.ContentFrame.ScrollBarImageColor3 = self.colors.accent
+
+	-- Update settings frame colors
+	self.settingsFrame.SettingsFrame.BackgroundColor3 = self.colors.background
+	self.settingsFrame.SettingsFrame.TopBar.BackgroundColor3 = self.colors.topBar
+	self.settingsFrame.SettingsFrame.TopBar.Title.TextColor3 = self.colors.text
+	self.settingsFrame.SettingsFrame.TopBar.CloseButton.TextColor3 = self.colors.text
+	self.settingsFrame.SettingsFrame.ContentFrame.ScrollBarImageColor3 = self.colors.accent
+
+	-- Update all buttons and controls
+	self:updateContent()
+end
+
+function ModernMenu:destroy()
+	if self.inputConnection then
+		self.inputConnection:Disconnect()
+	end
+	self.mainFrame:Destroy()
+	self.settingsFrame:Destroy()
+end
+
+return ModernMenu
