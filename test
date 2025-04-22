@@ -1,0 +1,96 @@
+local player = game:GetService("Players").LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local keyBoard = workspace:WaitForChild(`{player.Name}SpawnedInToys`):WaitForChild("MusicKeyboard")
+local key = {
+	["C"] = keyBoard:WaitForChild("Key1C"),
+	["D"] = keyBoard:WaitForChild("Key1D"),
+	["E"] = keyBoard:WaitForChild("Key1E"),
+	["F"] = keyBoard:WaitForChild("Key1F"),
+	["G"] = keyBoard:WaitForChild("Key1G"),
+	
+	["A2"] = keyBoard:WaitForChild("Key2A"),
+	["B2"] = keyBoard:WaitForChild("Key2B"),
+	["C2"] = keyBoard:WaitForChild("Key2C"),
+	["D2"] = keyBoard:WaitForChild("Key2D"),
+	["E2"] = keyBoard:WaitForChild("Key2E"),
+	["F2"] = keyBoard:WaitForChild("Key2F"),
+	["G2"] = keyBoard:WaitForChild("Key2G"),
+
+	["A3"] = keyBoard:WaitForChild("Key3A"),
+	["B3"] = keyBoard:WaitForChild("Key3B"),
+	["C3"] = keyBoard:WaitForChild("Key3C"),
+	
+	["C#"] = keyBoard:WaitForChild("Key1Csharp"),
+	["D#"] = keyBoard:WaitForChild("Key1Dsharp"),
+	["F#"] = keyBoard:WaitForChild("Key1Fsharp"),
+	["G#"] = keyBoard:WaitForChild("Key1Gsharp"),
+	
+	["A2#"] = keyBoard:WaitForChild("Key2Asharp"),
+	["C2#"] = keyBoard:WaitForChild("Key2Csharp"),
+	["D2#"] = keyBoard:WaitForChild("Key2Dsharp"),
+	["F2#"] = keyBoard:WaitForChild("Key2Fsharp"),
+	["G2#"] = keyBoard:WaitForChild("Key2Gsharp"),
+	["A3#"] = keyBoard:WaitForChild("Key2Asharp")
+	
+	--[[BASE:
+	Key_White: C D E F G A2 B2 C2 D2 E2 F2 G2 A3 B3 C3
+	Key_White: C# D# F# G# A2# C2# D2# F2# G2# A3#
+	]]
+	
+}
+
+local function OnPlay(keys)
+	local root = char:WaitForChild("HumanoidRootPart")
+	local args = {
+		[1] = keys,
+		[2] = root.CFrame
+	}
+
+	game:GetService("ReplicatedStorage"):WaitForChild("GrabEvents"):WaitForChild("SetNetworkOwner"):FireServer(unpack(args))
+end
+
+for i = 1, 2 do
+	OnPlay(key['F#']) OnPlay(key['A']) 
+	wait(0.6)
+	OnPlay(key['F#']) OnPlay(key['A']) 
+	wait(0.6)
+end
+wait(0.5)
+for i = 1, 4 do
+	OnPlay(key['A2']) OnPlay(key['G2']) wait(0.1) OnPlay(key['F#']) OnPlay(key['A']) 
+	wait(0.3)
+	OnPlay(key['C3']) OnPlay(key['A2'])
+	wait(0.3)
+	OnPlay(key['D2#']) OnPlay(key['C3'])
+	wait(0.3)
+	OnPlay(key['C3']) OnPlay(key['D2#']) wait(0.1) OnPlay(key['F#']) OnPlay(key['A'])
+	wait(0.3)
+	OnPlay(key['A2']) OnPlay(key['C3'])
+	wait(0.6)
+	wait(1)
+end
+wait(1)
+for i = 1, 2 do
+	OnPlay(key['C3']) OnPlay(key['C3'])
+	wait(0.2)
+	OnPlay(key['A2']) OnPlay(key['A2'])
+	wait(0.2)
+	OnPlay(key['G2']) OnPlay(key['G2'])
+	wait(0.4)
+	OnPlay(key['F2']) OnPlay(key['F2'])
+	wait(0.8)
+end
+wait(1)
+for i = 1, 4 do
+	OnPlay(key['A2']) OnPlay(key['G2']) wait(0.1) OnPlay(key['F#']) OnPlay(key['A']) 
+	wait(0.29)
+	OnPlay(key['C3']) OnPlay(key['A2'])
+	wait(0.3)
+	OnPlay(key['D2#']) OnPlay(key['C3'])
+	wait(0.3)
+	OnPlay(key['C3']) OnPlay(key['D2#']) wait(0.1) OnPlay(key['F#']) OnPlay(key['A'])
+	wait(0.29)
+	OnPlay(key['A2']) OnPlay(key['C3'])
+	wait(0.6)
+	wait(1)
+end
